@@ -35,6 +35,10 @@ const APPLE_ENABLED = false;
 // While this is false, Halftime AI uses the replies built into the app.
 const AI_ENABLED = false;
 
+// "Reframe it" AI server (Cloudflare Worker, see cloudflare/README.md).
+// Paste its address here, ending in /reframe. Leave empty to use the guided version without AI.
+const REFRAME_URL = "";
+
 // Region of the "chat" Cloud Function.
 const FUNCTIONS_REGION = "asia-northeast3";
 
@@ -214,6 +218,31 @@ window.HalftimeData = {
     ]);
     await deleteDoc(doc(db, "users", uid));
   }),
+
+  // "Reframe it": returns {acknowledge, reframe}, {crisis: true}, or {error} where error is
+  // "unavailable" (no AI right now), "limit" (daily limit reached) or "unauthenticated".
+  async reframe(text, avoid) {
+    if (!REFRAME_URL) return { error: "unavailable" };
+    try {
+      const token = await me().getIdToken();
+      const res = await fetch(REFRAME_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ text, avoid: avoid || "" }),
+        signal: AbortSignal.timeout(20000)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) return { error: "limit" };
+      if (res.status === 401) return { error: "unauthenticated" };
+      if (!res.ok) return { error: "unavailable" };
+      if (data.crisis) return { crisis: true };
+      if (typeof data.reframe === "string" && data.reframe.trim()) return { acknowledge: data.acknowledge || "", reframe: data.reframe };
+      return { error: "unavailable" };
+    } catch (e) {
+      console.warn("[Halftime] reframe", e);
+      return { error: "unavailable" };
+    }
+  },
 
   // Halftime AI reply from the "chat" Cloud Function. Returns null if it isn't available,
   // so the app can fall back to its built-in replies.
