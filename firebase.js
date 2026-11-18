@@ -37,7 +37,7 @@ const AI_ENABLED = false;
 
 // "Reframe it" AI server (Cloudflare Worker, see cloudflare/README.md).
 // Paste its address here, ending in /reframe. Leave empty to use the guided version without AI.
-const REFRAME_URL = "";
+const REFRAME_URL = "https://unstressed-reframe.bubble-youthimpact.workers.dev/reframe";
 
 // Region of the "chat" Cloud Function.
 const FUNCTIONS_REGION = "asia-northeast3";
