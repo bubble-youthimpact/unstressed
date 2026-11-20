@@ -288,6 +288,7 @@ window.UnstressedData = {
         body: JSON.stringify({ history, cardType: cardType || "" }),
         signal: AbortSignal.timeout(15000)
       });
+      if (res.status === 429) return { limit: true };
       if (!res.ok) return null;
       const data = await res.json().catch(() => ({}));
       if (data.crisis) return { crisis: true };
