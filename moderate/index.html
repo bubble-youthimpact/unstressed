@@ -165,6 +165,12 @@ button.btn.ghost{border:1px solid var(--line)}
 .btn.no{background:transparent;border:1px solid var(--line);color:var(--alert)}
 .btn[disabled]{opacity:.55;cursor:wait}
 .google{display:flex;align-items:center;justify-content:center;gap:10px}
+#signin{width:100%;max-width:420px;align-self:center;box-sizing:border-box}
+.mod.signed-out{margin-left:auto;margin-right:auto}
+.mod.signed-out .doc-head{align-items:center;text-align:center}
+.mod.signed-out .lede{max-width:440px;margin-left:auto;margin-right:auto}
+#signin > p{text-align:center}
+#signin .btn{justify-content:center;width:100%}
 .msg{font-size:13.5px;line-height:1.45;color:var(--alert)}
 .msg.info{color:var(--accent-ink)}
 .uid{font:500 13px/1.4 var(--mono);background:var(--bg);border:1px dashed var(--line);border-radius:10px;padding:10px 12px;word-break:break-all;user-select:all}
@@ -242,7 +248,8 @@ button.btn.ghost{border:1px solid var(--line)}
 <script>
 (function(){
   var $=function(id){return document.getElementById(id)};
-  var show=function(id){['signin','not-admin','queue','unavailable'].forEach(function(x){$(x).hidden=x!==id})};
+  var show=function(id){['signin','not-admin','queue','unavailable'].forEach(function(x){$(x).hidden=x!==id});
+    document.querySelector('.mod').classList.toggle('signed-out',id==='signin')};
   var PREVIEW=location.protocol==='file:'||/claude|^localhost$|^127\.0\.0\.1$/.test(location.hostname);
   var GUIDE='Check: no full names or contact details of others, no self-harm methods, no diet or weight-cut numbers, no bullying, focuses on what helped.';
   var status='pending',data={pending:[],approved:[],declined:[],reports:[]},stops=[],busy={};
