@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>Halftime Story Review</title>
-<meta name="description" content="Review and publish stories submitted by Halftime athletes.">
+<title>Unstressed Story Review</title>
+<meta name="description" content="Review and publish stories submitted by Unstressed athletes.">
 <meta name="robots" content="noindex">
 <script type="module" src="../firebase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -139,13 +139,13 @@ h1{margin:0;font-size:clamp(38px,6vw,60px);line-height:1.02;letter-spacing:-.035
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <a class="brand" href="../" aria-label="Halftime home"><span class="mark"></span>Halftime</a>
+  <a class="brand" href="../" aria-label="Unstressed home"><span class="mark"></span>Unstressed</a>
   <nav class="nav" aria-label="Main"><a href="../privacy/">Privacy Policy</a><a href="../terms/">Terms of Use</a><a href="../community-guidelines/">Guidelines</a><a class="cta" href="../">Open the app</a></nav>
   <button class="menu-btn" id="menu-open" aria-label="Open menu" aria-controls="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
 </div></header>
 <div class="sheet" id="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
   <div class="sheet-top">
-    <a class="brand" href="../"><span class="mark"></span>Halftime</a>
+    <a class="brand" href="../"><span class="mark"></span>Unstressed</a>
     <button class="close" id="menu-close" aria-label="Close menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <ul class="sheet-links"><li><a href="../privacy/">Privacy Policy<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li><a href="../terms/">Terms of Use<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li><a href="../community-guidelines/">Community Guidelines<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li><a href="../">Open the app<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li></ul>
@@ -181,15 +181,23 @@ button.btn.ghost{border:1px solid var(--line)}
 .card .text p{margin:0;overflow-wrap:anywhere}
 .card .check{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
 .empty{color:var(--muted);text-align:center;padding:40px 16px;border:1.5px dashed var(--line);border-radius:20px}
+.reports{display:flex;flex-direction:column;gap:8px;background:var(--bg);border-radius:14px;padding:12px 14px}
+.reports .r{display:flex;flex-direction:column;gap:2px;font-size:14px;line-height:1.45}
+.reports .r + .r{border-top:1px solid var(--line);padding-top:8px}
+.reports b{font-weight:700}
+.reports .d{color:var(--muted);overflow-wrap:anywhere}
+.note{font-size:13.5px;line-height:1.5;color:var(--muted)}
+.tabs button.alert .count{color:var(--alert)}
+.tabs button.alert[aria-selected="true"] .count{color:inherit}
 .pill{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:6px 9px;border-radius:999px;background:var(--fill-bg);color:var(--fill-ink)}
 </style>
 
 <main class="wrap">
   <div class="mod">
     <div class="doc-head" style="padding:0;gap:10px">
-      <div class="eyebrow">Halftime · Moderators</div>
+      <div class="eyebrow">Unstressed · Moderators</div>
       <h1>Story review</h1>
-      <p class="lede">Every story waits here until a moderator approves it. Check it against the Community Guidelines before you publish.</p>
+      <p class="lede">Every story waits here until a moderator approves it, including stories their authors have edited. Reports from athletes show up under Reports.</p>
     </div>
 
     <div id="preview-note" class="pill" hidden style="align-self:flex-start">Preview with sample stories · nothing is saved</div>
@@ -218,6 +226,7 @@ button.btn.ghost{border:1px solid var(--line)}
           <button role="tab" data-status="pending" aria-selected="true">Waiting for review <span class="count" id="n-pending">0</span></button>
           <button role="tab" data-status="approved" aria-selected="false">Published <span class="count" id="n-approved">0</span></button>
           <button role="tab" data-status="declined" aria-selected="false">Declined <span class="count" id="n-declined">0</span></button>
+          <button role="tab" data-status="reports" aria-selected="false" id="tab-reports">Reports <span class="count" id="n-reports">0</span></button>
         </div>
         <div id="queue-msg" class="msg" role="alert" hidden></div>
         <div class="list" id="list" aria-live="polite"></div>
@@ -236,7 +245,40 @@ button.btn.ghost{border:1px solid var(--line)}
   var show=function(id){['signin','not-admin','queue','unavailable'].forEach(function(x){$(x).hidden=x!==id})};
   var PREVIEW=location.protocol==='file:'||/claude|^localhost$|^127\.0\.0\.1$/.test(location.hostname);
   var GUIDE='Check: no full names or contact details of others, no self-harm methods, no diet or weight-cut numbers, no bullying, focuses on what helped.';
-  var status='pending',data={pending:[],approved:[],declined:[]},stops=[],busy={};
+  var status='pending',data={pending:[],approved:[],declined:[],reports:[]},stops=[],busy={};
+  var REASONS={unsafe:'Could be harmful',bullying:'Bullying or hateful',private:'Shares private details',spam:'Spam or not a real story',other:'Something else'};
+  var STATUS_NAME={pending:'waiting for review',approved:'published',declined:'declined'};
+  // Reports grouped by story, most recent first.
+  function grouped(){
+    var by={},order=[];
+    data.reports.forEach(function(r){if(!by[r.storyId]){by[r.storyId]={storyId:r.storyId,title:r.storyTitle,story:r.story,list:[]};order.push(r.storyId)}by[r.storyId].list.push(r)});
+    return order.map(function(k){return by[k]});
+  }
+  function renderReports(){
+    var groups=grouped();
+    $('n-reports').textContent=groups.length;
+    $('tab-reports').classList.toggle('alert',groups.length>0);
+    if(status!=='reports')return;
+    if(!groups.length){$('list').innerHTML='<div class="empty">No reports. Nothing to check.</div>';return}
+    $('list').innerHTML=groups.map(function(g){
+      var st=g.story,builtIn=!st&&/^s\d+$/.test(g.storyId),id=esc(g.storyId),dis=busy[g.storyId]?' disabled':'';
+      var reports='<div class="reports">'+g.list.map(function(r){
+        return '<div class="r"><span><b>'+esc(REASONS[r.reason]||'Something else')+'</b> · <span class="d">'+esc(when(r.createdAt))+'</span></span>'+(r.details?'<span class="d">“'+esc(r.details)+'”</span>':'')+'</div>';
+      }).join('')+'</div>';
+      var head='<div class="meta">'+g.list.length+(g.list.length===1?' report':' reports')+(st?' · '+esc(st.anon?'Anonymous':(st.authorName||'No name'))+' · '+esc(st.sport)+' · '+esc(STATUS_NAME[st.status]||st.status):'')+'</div>';
+      var body,btns;
+      if(st){
+        body='<h2>'+esc(st.title)+'</h2><div class="text">'+paras(st.body).map(function(p){return '<p>'+esc(p)+'</p>'}).join('')+'</div>';
+        btns=(st.status==='approved'?'<button type="button" class="btn no" data-rid="'+id+'" data-ract="unpublish"'+dis+'>Unpublish story</button>':'')+
+          '<button type="button" class="btn no" data-rid="'+id+'" data-ract="delete"'+dis+'>Delete story</button>'+
+          '<button type="button" class="btn ghost" data-rid="'+id+'" data-ract="dismiss"'+dis+'>Keep it, dismiss report</button>';
+      }else{
+        body='<h2>'+esc(g.title||'Untitled')+'</h2><p class="note">'+(builtIn?'This is one of the built-in starter stories. To change or remove it, edit the app itself.':'This story has already been deleted.')+'</p>';
+        btns='<button type="button" class="btn ghost" data-rid="'+id+'" data-ract="dismiss"'+dis+'>Dismiss report</button>';
+      }
+      return '<article class="card">'+head+body+reports+'<div class="row">'+btns+'</div></article>';
+    }).join('');
+  }
 
   function esc(t){return String(t==null?'':t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function when(ms){try{return new Date(ms).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}catch(e){return ''}}
@@ -250,6 +292,8 @@ button.btn.ghost{border:1px solid var(--line)}
   function render(){
     ['pending','approved','declined'].forEach(function(k){$('n-'+k).textContent=data[k].length});
     document.querySelectorAll('.tabs button').forEach(function(b){b.setAttribute('aria-selected',String(b.dataset.status===status))});
+    renderReports();
+    if(status==='reports')return;
     var items=data[status];
     if(!items.length){$('list').innerHTML='<div class="empty">'+(status==='pending'?'No stories waiting. Nice work.':'Nothing here yet.')+'</div>';return}
     $('list').innerHTML=items.map(function(s){
@@ -266,6 +310,17 @@ button.btn.ghost{border:1px solid var(--line)}
   }
   document.querySelector('.tabs').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;status=b.dataset.status;render()});
   $('list').addEventListener('click',async function(e){
+    var rb=e.target.closest('button[data-ract]');
+    if(rb){
+      var sid=rb.dataset.rid,ract=rb.dataset.ract;
+      busy[sid]=true;render();$('queue-msg').hidden=true;
+      try{
+        if(ract==='unpublish')await A.review(sid,'declined');
+        if(ract==='delete')await A.remove(sid);
+        await A.clearReports(sid);
+      }catch(err){$('queue-msg').textContent=err.message;$('queue-msg').hidden=false}
+      delete busy[sid];render();return;
+    }
     var b=e.target.closest('button[data-act]');if(!b)return;
     var id=b.dataset.id,act=b.dataset.act;
     busy[id]=true;render();$('queue-msg').hidden=true;
@@ -281,9 +336,17 @@ button.btn.ghost{border:1px solid var(--line)}
     {id:'p2',title:'How I stopped choking at the free-throw line',body:'Every close game I missed free throws. My coach gave me one cue word: "smooth". I say it on every exhale before I shoot.\n\nI still get nervous, but now I have something to do with it.',sport:'Basketball',anon:false,authorName:'Chris',status:'pending',createdAt:Date.now()-7200e3},
     {id:'a1',title:'Coming back after a concussion',body:'Sitting out for six weeks was the loneliest part of my season. Going to film sessions helped me feel like part of the team.',sport:'Football',anon:false,authorName:'Ari',status:'approved',createdAt:Date.now()-86400e3}
   ];
+  var SAMPLE_REPORTS=[
+    {id:'a1_u7',storyId:'a1',storyTitle:'Coming back after a concussion',reason:'private',details:'It names a teammate and our school.',createdAt:Date.now()-1800e3},
+    {id:'a1_u9',storyId:'a1',storyTitle:'Coming back after a concussion',reason:'other',details:'',createdAt:Date.now()-5400e3},
+    {id:'s2_u4',storyId:'s2',storyTitle:'Built-in starter story',reason:'spam',details:'',createdAt:Date.now()-9000e3}
+  ];
   var DEMO={
-    _s:SAMPLE.slice(),_cb:{},
-    _emit:function(){var self=this;Object.keys(this._cb).forEach(function(k){self._cb[k](self._s.filter(function(x){return x.status===k}))})},
+    _s:SAMPLE.slice(),_r:SAMPLE_REPORTS.slice(),_cb:{},
+    _emit:function(){var self=this;Object.keys(this._cb).forEach(function(k){self._cb[k](self._s.filter(function(x){return x.status===k}))});if(this._rcb)this._rcb(this._reports())},
+    _reports:function(){var s=this._s;return this._r.map(function(r){return Object.assign({},r,{story:s.filter(function(x){return x.id===r.storyId})[0]||null})})},
+    watchReports:function(cb){this._rcb=cb;cb(this._reports());return function(){}},
+    clearReports:async function(id){await new Promise(function(r){setTimeout(r,300)});this._r=this._r.filter(function(x){return x.storyId!==id});this._emit()},
     watchQueue:function(st,cb){this._cb[st]=cb;cb(this._s.filter(function(x){return x.status===st}));return function(){}},
     review:async function(id,st){await new Promise(function(r){setTimeout(r,300)});this._s=this._s.map(function(x){return x.id===id?Object.assign({},x,{status:st}):x});this._emit()},
     remove:async function(id){this._s=this._s.filter(function(x){return x.id!==id});this._emit()}
@@ -295,6 +358,7 @@ button.btn.ghost{border:1px solid var(--line)}
     ['pending','approved','declined'].forEach(function(k){
       stops.push(A.watchQueue(k,function(list){data[k]=list;render()},function(err){$('queue-msg').textContent=err.message;$('queue-msg').hidden=false}));
     });
+    if(A.watchReports)stops.push(A.watchReports(function(list){data.reports=list;render()},function(err){$('queue-msg').textContent=err.message;$('queue-msg').hidden=false}));
     show('queue');
   }
   async function onUser(u){
@@ -306,8 +370,8 @@ button.btn.ghost{border:1px solid var(--line)}
   function signinError(err){$('signin-msg').textContent=err.message;$('signin-msg').hidden=false}
 
   function boot(){
-    if(window.HalftimeAuth&&window.HalftimeAdmin){
-      A=window.HalftimeAdmin;AUTH=window.HalftimeAuth;
+    if(window.UnstressedAuth&&window.UnstressedAdmin){
+      A=window.UnstressedAdmin;AUTH=window.UnstressedAuth;
       AUTH.onChange(onUser);
     }else if(PREVIEW){
       A=DEMO;$('preview-note').hidden=false;$('who').textContent='Preview';startQueue();return;
@@ -330,7 +394,7 @@ button.btn.ghost{border:1px solid var(--line)}
 
 <footer class="foot"><div class="wrap">
   <nav aria-label="Legal"><a href="../privacy/">Privacy Policy</a><a href="../terms/">Terms of Use</a><a href="../community-guidelines/">Community Guidelines</a></nav>
-  <small>© 2026 Halftime · Not a crisis service. In an emergency, call 911 or call or text 988.</small>
+  <small>© 2026 Unstressed · Not a crisis service. In an emergency, call 911 or call or text 988.</small>
 </div></footer>
 
 <script>

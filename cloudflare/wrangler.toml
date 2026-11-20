@@ -1,6 +1,6 @@
-# Cloudflare Worker for Halftime "Reframe it".
+# Cloudflare Worker for Unstressed AI chat and "Reframe it".
 # Deploy with:  npx wrangler deploy   (see README.md for the full steps)
-name = "halftime-reframe"
+name = "unstressed-reframe"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 
@@ -9,7 +9,7 @@ FIREBASE_PROJECT_ID = "halftime-79e0e"
 # Your site's address. Add more, separated by commas (for example a custom domain).
 ALLOWED_ORIGINS = "https://YOUR-GITHUB-USERNAME.github.io"
 
-# Optional but recommended: enforces 30 reframes per person per day.
+# Optional but recommended: enforces 60 chat replies and 30 reframes per person per day.
 # Create it with:  npx wrangler kv namespace create LIMITS
 # then paste the id it prints below and remove the # signs.
 # [[kv_namespaces]]

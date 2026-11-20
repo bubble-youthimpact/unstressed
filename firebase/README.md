@@ -1,7 +1,8 @@
-# Halftime: Firebase setup
+# Unstressed: Firebase setup
 
-This folder holds the parts of Halftime that run on Firebase: the database security rules
-and index settings. (`functions/` is an optional AI add-on for later; see below.)
+This folder holds the parts of Unstressed that run on Firebase: the database security rules
+and index settings. The AI (Unstressed AI chat and Reframe it) runs on Cloudflare instead; see
+`cloudflare/README.md`.
 The website itself (the app, legal pages and `/moderate/`) is hosted on GitHub Pages.
 
 ## One-time setup in the Firebase console
@@ -26,17 +27,9 @@ firebase deploy --only firestore          # security rules + index settings
 ```
 
 Or paste `firestore.rules` into Firestore Database → Rules in the console and click Publish.
+Publish again whenever `firestore.rules` changes (for example, story editing and reports need the latest rules).
 
 Everything runs on the free Spark plan. No server code is deployed.
-
-### Later: real AI replies (optional)
-
-Halftime AI currently uses replies built into the app. The `functions/` folder holds a ready-made
-OpenAI version for later. It needs the Blaze (pay-as-you-go) plan and an OpenAI API key with prepaid credits.
-To turn it on: add `"functions": [{ "source": "functions" }]` to `firebase.json`, run
-`cd functions && npm install && cd ..`, `firebase functions:secrets:set OPENAI_API_KEY`,
-`firebase deploy --only functions`, then set `AI_ENABLED = true` in `firebase.js` and update the
-Halftime AI section of the Privacy Policy.
 
 ## What's stored where
 
@@ -48,5 +41,6 @@ Halftime AI section of the Privacy Policy.
 | `users/{uid}/state/prefs` | stories they liked, Learn articles they've read, Good Things Bank entries | that person |
 | `stories/{id}` | submitted stories and their review status | everyone signed in, once approved; the author; moderators |
 | `stories/{id}/likes/{uid}` | one "I felt this" per person | everyone signed in |
+| `reports/{storyId}_{uid}` | one report per person per story: reason, details | moderators only |
 | `admins/{uid}` | moderators (added by hand) | that moderator |
 

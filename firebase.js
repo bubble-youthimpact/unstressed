@@ -1,8 +1,8 @@
-// Halftime ↔ Firebase.
+// Unstressed ↔ Firebase.
 // Provides three things the app and the moderation page look for:
-//   window.HalftimeAuth   sign-in, sign-up, sign-out, delete account
-//   window.HalftimeData   each user's saved data, stories, likes and AI replies
-//   window.HalftimeAdmin  story review (only works for accounts listed in the "admins" collection)
+//   window.UnstressedAuth   sign-in, sign-up, sign-out, delete account
+//   window.UnstressedData   each user's saved data, stories, likes and AI replies
+//   window.UnstressedAdmin  story review (only works for accounts listed in the "admins" collection)
 // Each function returns plain data or throws an Error with a message people can read.
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -16,7 +16,6 @@ import {
   doc, collection, query, where, limit, getDoc, getDocs, setDoc, addDoc, updateDoc,
   deleteDoc, onSnapshot, serverTimestamp, getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_j5XwxB3tz7_68DoJSHhKl3UqlC215b8",
@@ -31,16 +30,12 @@ const firebaseConfig = {
 // and enabled in Firebase (Authentication → Sign-in method → Apple).
 const APPLE_ENABLED = false;
 
-// Real AI replies need the "chat" Cloud Function (firebase/functions), which requires the Blaze plan.
-// While this is false, Halftime AI uses the replies built into the app.
-const AI_ENABLED = false;
-
-// "Reframe it" AI server (Cloudflare Worker, see cloudflare/README.md).
-// Paste its address here, ending in /reframe. Leave empty to use the guided version without AI.
-const REFRAME_URL = "https://unstressed-reframe.bubble-youthimpact.workers.dev/reframe";
-
-// Region of the "chat" Cloud Function.
-const FUNCTIONS_REGION = "asia-northeast3";
+// Unstressed AI server (Cloudflare Worker, see cloudflare/README.md). It writes both
+// Reframe it reframes and Unstressed AI chat replies. Paste its address here, without a slash at the end.
+// Leave it empty to run without AI: chat uses its built-in replies and Reframe it shows a guided version.
+const AI_SERVER = "https://unstressed-reframe.bubble-youthimpact.workers.dev";
+const REFRAME_URL = AI_SERVER && AI_SERVER.replace(/\/+$/, "") + "/reframe";
+const CHAT_URL = AI_SERVER && AI_SERVER.replace(/\/+$/, "") + "/chat";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -48,7 +43,6 @@ const auth = getAuth(app);
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
-const functions = getFunctions(app, FUNCTIONS_REGION);
 
 // ─── Errors ─────────────────────────────────────────────────
 const MESSAGES = {
@@ -74,8 +68,8 @@ const MESSAGES = {
   "not-signed-in": "Please sign in again."
 };
 const fail = (e, fallback) => {
-  console.warn("[Halftime]", e && e.code, e);
-  const code = e && e.code && String(e.code).replace(/^functions\//, "").replace(/^firestore\//, "");
+  console.warn("[Unstressed]", e && e.code, e);
+  const code = e && e.code && String(e.code).replace(/^firestore\//, "");
   return new Error(MESSAGES[e && e.code] || MESSAGES[code] || fallback || "Something went wrong. Please try again.");
 };
 const run = fn => async (...args) => {
@@ -99,7 +93,7 @@ const toUser = u => u && {
 };
 const saveProfile = u => setDoc(doc(db, "users", u.uid),
   { name: u.displayName || "", email: u.email || "", updatedAt: serverTimestamp() }, { merge: true })
-  .catch(e => console.warn("[Halftime] profile", e));
+  .catch(e => console.warn("[Unstressed] profile", e));
 
 const appleProvider = () => {
   const p = new OAuthProvider("apple.com");
@@ -113,7 +107,7 @@ const popup = async provider => {
   return toUser(user);
 };
 
-window.HalftimeAuth = {
+window.UnstressedAuth = {
   appleEnabled: APPLE_ENABLED,
   google: run(() => popup(new GoogleAuthProvider())),
   apple: run(() => popup(appleProvider())),
@@ -145,8 +139,18 @@ window.HalftimeAuth = {
 // users/{uid}/state/prefs     {liked}
 // stories/{id}                title, body, sport, anon, authorUid, authorName, status, createdAt
 // stories/{id}/likes/{uid}    one document per person who tapped "I felt this" ({at, uid})
+// reports/{storyId}_{uid}     one report per person per story, read by moderators
 const STATE_PARTS = ["plan", "chat", "prefs"];
 const stateDoc = (uid, part) => doc(db, "users", uid, "state", part);
+
+const REPORT_REASONS = ["unsafe", "bullying", "private", "spam", "other"];
+const cleanStory = ({ title, body, sport, anon }, u) => ({
+  title: String(title).trim().slice(0, 120),
+  body: String(body).trim().slice(0, 5000),
+  sport: String(sport).slice(0, 30),
+  anon: !!anon,
+  authorName: anon ? "" : (u.displayName || "").trim().split(/\s+/)[0].slice(0, 60)
+});
 
 const storyOut = d => {
   const x = d.data();
@@ -156,14 +160,14 @@ const storyOut = d => {
   };
 };
 
-window.HalftimeData = {
+window.UnstressedData = {
   // Calls cb(part, data, {fromCache}) now and whenever that part changes on any device.
   // data is null when nothing is saved yet. Returns a stop function.
   watchState(cb) {
     const uid = me().uid;
     const stops = STATE_PARTS.map(part => onSnapshot(stateDoc(uid, part),
       snap => cb(part, snap.exists() ? snap.data() : null, { fromCache: snap.metadata.fromCache }),
-      e => console.warn("[Halftime] watch " + part, e)));
+      e => console.warn("[Unstressed] watch " + part, e)));
     return () => stops.forEach(s => s());
   },
   saveState: run(async (part, data) => {
@@ -174,26 +178,41 @@ window.HalftimeData = {
   submitStory: run(async ({ title, body, sport, anon }) => {
     const u = me();
     const ref = await addDoc(collection(db, "stories"), {
-      title: String(title).trim().slice(0, 120),
-      body: String(body).trim().slice(0, 5000),
-      sport: String(sport).slice(0, 30),
-      anon: !!anon,
+      ...cleanStory({ title, body, sport, anon }, u),
       authorUid: u.uid,
-      authorName: anon ? "" : (u.displayName || "").trim().split(/\s+/)[0].slice(0, 60),
       status: "pending",
       createdAt: serverTimestamp()
     });
     return ref.id;
   }),
+  // Editing a story sends it back to review, so changes are checked before anyone sees them.
+  updateStory: run(async (id, story) => {
+    await updateDoc(doc(db, "stories", id), {
+      ...cleanStory(story, me()), status: "pending", updatedAt: serverTimestamp()
+    });
+  }),
+  deleteStory: run(id => deleteDoc(doc(db, "stories", id))),
+  // One report per person per story. Returns "sent" or "already".
+  reportStory: run(async (story, reason, details) => {
+    const u = me();
+    const ref = doc(db, "reports", story.id + "_" + u.uid);
+    if ((await getDoc(ref).catch(() => null))?.exists()) return "already";
+    await setDoc(ref, {
+      storyId: String(story.id), storyTitle: String(story.title || "").slice(0, 120),
+      reporterUid: u.uid, reason: REPORT_REASONS.includes(reason) ? reason : "other",
+      details: String(details || "").trim().slice(0, 500), createdAt: serverTimestamp()
+    });
+    return "sent";
+  }),
   watchMyStories(cb) {
     const q = query(collection(db, "stories"), where("authorUid", "==", me().uid));
     return onSnapshot(q, s => cb(s.docs.map(storyOut).sort((a, b) => b.createdAt - a.createdAt)),
-      e => console.warn("[Halftime] my stories", e));
+      e => console.warn("[Unstressed] my stories", e));
   },
   watchPublished(cb) {
     const q = query(collection(db, "stories"), where("status", "==", "approved"), limit(100));
     return onSnapshot(q, s => cb(s.docs.map(storyOut).sort((a, b) => b.createdAt - a.createdAt)),
-      e => console.warn("[Halftime] stories", e));
+      e => console.warn("[Unstressed] stories", e));
   },
   likeCount: async id => {
     try { return (await getCountFromServer(collection(db, "stories", id, "likes"))).data().count; }
@@ -205,14 +224,26 @@ window.HalftimeData = {
     else await deleteDoc(ref);
   }),
 
+  // Changes the name shown in the app and on new stories.
+  updateName: run(async name => {
+    const u = me();
+    await updateProfile(u, { displayName: String(name).trim().slice(0, 60) });
+    const fresh = auth.currentUser || u;
+    await saveProfile(fresh);
+    return toUser(fresh);
+  }),
+  resetPassword: run(() => sendPasswordResetEmail(auth, me().email)),
+
   // Erases everything this person stored. Called just before their account is deleted.
   deleteAllData: run(async () => {
     const uid = me().uid;
     const prefs = await getDoc(stateDoc(uid, "prefs")).catch(() => null);
     const liked = (prefs && prefs.exists() && prefs.data().liked) || {};
     const mine = await getDocs(query(collection(db, "stories"), where("authorUid", "==", uid)));
+    const reports = await getDocs(query(collection(db, "reports"), where("reporterUid", "==", uid))).catch(() => ({ docs: [] }));
     await Promise.all([
       ...Object.keys(liked).map(id => deleteDoc(doc(db, "stories", id, "likes", uid))),
+      ...reports.docs.map(d => deleteDoc(d.ref)),
       ...mine.docs.map(d => deleteDoc(d.ref)),
       ...STATE_PARTS.map(p => deleteDoc(stateDoc(uid, p)))
     ]);
@@ -239,41 +270,73 @@ window.HalftimeData = {
       if (typeof data.reframe === "string" && data.reframe.trim()) return { acknowledge: data.acknowledge || "", reframe: data.reframe };
       return { error: "unavailable" };
     } catch (e) {
-      console.warn("[Halftime] reframe", e);
+      console.warn("[Unstressed] reframe", e);
       return { error: "unavailable" };
     }
   },
 
-  // Halftime AI reply from the "chat" Cloud Function. Returns null if it isn't available,
-  // so the app can fall back to its built-in replies.
+  // Unstressed AI chat reply from the AI server: { text, status } or { crisis: true }.
+  // Returns null if it isn't available
+  // (or the daily limit is reached), so the app falls back to its built-in replies.
   async aiReply(history, cardType) {
-    if (!AI_ENABLED) return null;
+    if (!CHAT_URL) return null;
     try {
-      me();
-      const res = await httpsCallable(functions, "chat", { timeout: 15000 })({ history, cardType });
-      const text = res && res.data && res.data.text;
-      return typeof text === "string" && text.trim() ? text.trim() : null;
+      const token = await me().getIdToken();
+      const res = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ history, cardType: cardType || "" }),
+        signal: AbortSignal.timeout(15000)
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}));
+      if (data.crisis) return { crisis: true };
+      if (typeof data.text !== "string" || !data.text.trim()) return null;
+      return { text: data.text.trim(), status: data.status || "ok" };
     } catch (e) {
-      console.warn("[Halftime] AI reply", e && e.code, e);
+      console.warn("[Unstressed] AI reply", e);
       return null;
     }
   }
 };
 
 // ─── Moderation (used by /moderate/) ────────────────────────
-window.HalftimeAdmin = {
+window.UnstressedAdmin = {
   isAdmin: async () => {
     try { return (await getDoc(doc(db, "admins", me().uid))).exists(); } catch (e) { return false; }
   },
   watchQueue(status, cb, onError) {
     const q = query(collection(db, "stories"), where("status", "==", status), limit(200));
     return onSnapshot(q, s => cb(s.docs.map(storyOut).sort((a, b) => b.createdAt - a.createdAt)),
-      e => { console.warn("[Halftime] queue", e); onError && onError(fail(e)); });
+      e => { console.warn("[Unstressed] queue", e); onError && onError(fail(e)); });
   },
   review: run(async (id, status) => {
     await updateDoc(doc(db, "stories", id), { status, reviewedAt: serverTimestamp(), reviewedBy: me().uid });
   }),
-  remove: run(id => deleteDoc(doc(db, "stories", id)))
+  remove: run(id => deleteDoc(doc(db, "stories", id))),
+  // Reports: cb(list of {id, storyId, storyTitle, reason, details, createdAt, story})
+  // where story is the reported story, or null if it has already been removed.
+  watchReports(cb, onError) {
+    let stopped = false;
+    const stop = onSnapshot(query(collection(db, "reports"), limit(300)), async s => {
+      const list = s.docs.map(d => { const x = d.data(); return {
+        id: d.id, storyId: x.storyId, storyTitle: x.storyTitle || "", reason: x.reason,
+        details: x.details || "", createdAt: ms(x.createdAt) }; });
+      const ids = [...new Set(list.map(r => r.storyId))];
+      const stories = {};
+      await Promise.all(ids.map(async id => {
+        const d = await getDoc(doc(db, "stories", id)).catch(() => null);
+        stories[id] = d && d.exists() ? storyOut(d) : null;
+      }));
+      if (!stopped) cb(list.map(r => ({ ...r, story: stories[r.storyId] })).sort((a, b) => b.createdAt - a.createdAt));
+    }, e => { console.warn("[Unstressed] reports", e); onError && onError(fail(e)); });
+    return () => { stopped = true; stop(); };
+  },
+  // Clears every report about one story (after unpublishing it or deciding it's fine).
+  clearReports: run(async storyId => {
+    const s = await getDocs(query(collection(db, "reports"), where("storyId", "==", storyId)));
+    await Promise.all(s.docs.map(d => deleteDoc(d.ref)));
+  })
 };
 
-window.dispatchEvent(new Event("halftime-firebase-ready"));
+window.dispatchEvent(new Event("unstressed-firebase-ready"));

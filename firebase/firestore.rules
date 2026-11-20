@@ -1,10 +1,12 @@
 rules_version = '2';
 
-// Halftime security rules.
+// Unstressed security rules.
 // - Each person can read and write only their own saved data.
 // - Anyone signed in can read approved stories; authors can see their own submissions.
 // - New stories always start as "pending". Only moderators (documents in /admins) can approve them.
+// - Authors can edit their own story, which sends it back to "pending" for review, or delete it.
 // - "I felt this" likes are one document per person, so counts can't be faked.
+// - Reports: one per person per story. Only moderators can read them.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -29,6 +31,14 @@ service cloud.firestore {
       }
     }
 
+    function validStory(d) {
+      return d.title is string && d.title.size() >= 4 && d.title.size() <= 120
+        && d.body is string && d.body.size() >= 40 && d.body.size() <= 5000
+        && d.sport is string && d.sport.size() <= 30
+        && d.anon is bool
+        && d.authorName is string && d.authorName.size() <= 60;
+    }
+
     // Stories
     match /stories/{storyId} {
       allow read: if signedIn() && (
@@ -43,13 +53,16 @@ service cloud.firestore {
         && request.resource.data.authorUid == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
-        && request.resource.data.title is string
-        && request.resource.data.title.size() >= 4 && request.resource.data.title.size() <= 120
-        && request.resource.data.body is string
-        && request.resource.data.body.size() >= 40 && request.resource.data.body.size() <= 5000
-        && request.resource.data.sport is string && request.resource.data.sport.size() <= 30
-        && request.resource.data.anon is bool
-        && request.resource.data.authorName is string && request.resource.data.authorName.size() <= 60;
+        && validStory(request.resource.data);
+
+      // Authors can edit their story's text. It goes back to review every time.
+      allow update: if signedIn()
+        && resource.data.authorUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['title', 'body', 'sport', 'anon', 'authorName', 'status', 'updatedAt'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.updatedAt == request.time
+        && validStory(request.resource.data);
 
       // Moderators can only change the review fields.
       allow update: if isAdmin()
@@ -66,6 +79,23 @@ service cloud.firestore {
           && request.resource.data.uid == uid;
         allow delete: if isMe(uid);
       }
+    }
+
+    // Reports: reports/{storyId}_{reporterUid}
+    match /reports/{reportId} {
+      // A person can check whether they already reported a story, and list their own reports.
+      allow get: if isAdmin() || (signedIn() && (resource == null || resource.data.reporterUid == request.auth.uid));
+      allow list: if isAdmin() || (signedIn() && resource.data.reporterUid == request.auth.uid);
+      allow create: if signedIn()
+        && reportId == request.resource.data.storyId + '_' + request.auth.uid
+        && request.resource.data.keys().hasOnly(['storyId', 'storyTitle', 'reporterUid', 'reason', 'details', 'createdAt'])
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.storyId is string && request.resource.data.storyId.size() <= 100
+        && request.resource.data.storyTitle is string && request.resource.data.storyTitle.size() <= 120
+        && request.resource.data.reason in ['unsafe', 'bullying', 'private', 'spam', 'other']
+        && request.resource.data.details is string && request.resource.data.details.size() <= 500
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isAdmin() || (signedIn() && resource.data.reporterUid == request.auth.uid);
     }
 
     // Moderators. Add documents here by hand in the Firebase console (document ID = the moderator's user UID).
